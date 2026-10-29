@@ -1,4 +1,4 @@
-# TLS Encryption & Handshake (Concept)
+# TLS Encryption & Handshake (Concept & Practical)
 
 A comprehensive guide explaining the TLS handshake, cryptographic mechanics, and practical verification using OpenSSL.
 
@@ -91,3 +91,119 @@ TLS leverages public-key cryptography (asymmetric keys) primarily during the han
 - If compromised, attackers can impersonate the server and potentially decrypt intercepted sessions.
 
 ---
+
+## TLS Handshake Version Check (Practical)
+
+### Step 1: Execute the OpenSSL Inspection Command
+
+Run `openssl s_client` against any HTTPS target:
+
+```bash
+openssl s_client -connect google.com:443
+```
+
+> **Tip for quick CLI output:** To exit automatically after the handshake rather than leaving an interactive session open, pipe an empty string:
+> ```bash
+> echo "" | openssl s_client -connect google.com:443
+> ```
+
+---
+
+### Step 2: What to Observe in the Output
+
+The output contains diagnostic information about the negotiated session. Pay specific attention to these three areas:
+
+```text
+CONNECTED(00000003)
+---
+Certificate chain
+ 0 s:CN = *.google.com
+   i:C = US, O = Google Trust Services, CN = WR2
+   a:PKEY: id-ecPublicKey, 256 (bit); sigalg: ecdsa-with-SHA256
+   v:NotBefore: Feb 10 08:30:00 2026 GMT; NotAfter: May 05 08:30:00 2026 GMT
+ 1 s:C = US, O = Google Trust Services, CN = WR2
+   i:C = US, O = Google Trust Services LLC, CN = GTS Root R4
+ 2 s:C = US, O = Google Trust Services LLC, CN = GTS Root R4
+   i:C = US, O = Root CA, CN = GlobalSign
+---
+Server certificate
+-----BEGIN CERTIFICATE-----
+MIICljCCAX6gAwIBAgIRAM...
+-----END CERTIFICATE-----
+subject=CN = *.google.com
+issuer=C = US, O = Google Trust Services, CN = WR2
+---
+No client certificate CA names sent
+Peer signing digest: SHA256
+Peer signature type: ECDSA
+Server Temp Key: X25519, 253 bits
+---
+SSL handshake has read 3820 bytes and written 390 bytes
+Verification: OK
+---
+New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384
+Server public key is 256 bit
+Secure Renegotiation IS NOT supported
+Compression: NONE
+Expansion: NONE
+No ALPN negotiated
+Early data was not sent
+Verify return code: 0 (ok)
+---
+```
+
+---
+
+### Step 3: Breakdown of Inspected Fields
+
+#### 1. Protocol Version
+```text
+New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384
+```
+- **Observed:** `TLSv1.3` (or `TLSv1.2` depending on client/server support).
+- **Meaning:** Shows the highest mutually supported TLS version agreed upon during the handshake. TLS 1.3 reduces handshake latency from 2 Round-Trip Times (2-RTT) to 1-RTT and deprecates insecure legacy algorithms.
+
+#### 2. Cipher Suite
+```text
+Cipher is TLS_AES_256_GCM_SHA384
+```
+This string specifies the exact algorithms chosen to secure the session:
+- **`TLS`**: Protocol.
+- **`AES_256_GCM`**: Symmetric bulk encryption algorithm (256-bit Advanced Encryption Standard in Galois/Counter Mode for authenticated encryption).
+- **`SHA384`**: Secure Hash Algorithm used for key derivation and integrity checks.
+
+*(In TLS 1.2, cipher suites also explicitly name key exchange and authentication, e.g., `ECDHE-RSA-AES256-GCM-SHA384`).*
+
+#### 3. Certificate Chain
+```text
+Certificate chain
+ 0 s:CN = *.google.com                          <-- Leaf / Server Certificate
+   i:C = US, O = Google Trust Services, CN = WR2
+ 1 s:C = US, O = Google Trust Services, CN = WR2 <-- Intermediate CA
+   i:C = US, O = Google Trust Services LLC, CN = GTS Root R4
+ 2 s:C = US, O = Google Trust Services LLC, CN = GTS Root R4 <-- Root CA
+```
+- `s:` (Subject): The entity being identified by this certificate.
+- `i:` (Issuer): The Certificate Authority that signed and verified this certificate.
+- **Chain of Trust:** The Leaf certificate is signed by an Intermediate CA, which is signed by a Root CA pre-installed in your operating system's trust store.
+- **Verification Return Code:** `Verify return code: 0 (ok)` confirms that the cryptographic signature chain is valid and untampered.
+
+---
+
+## Quick Reference CLI Filters
+
+Extract specific details directly using grep and OpenSSL:
+
+```bash
+# Check negotiated protocol version only
+echo "" | openssl s_client -connect google.com:443 2>/dev/null | grep -i "Protocol"
+
+# Check negotiated cipher suite only
+echo "" | openssl s_client -connect google.com:443 2>/dev/null | grep -i "Cipher"
+
+# Inspect certificate expiration dates
+echo "" | openssl s_client -connect google.com:443 2>/dev/null | openssl x509 -noout -dates
+
+# Check certificate issuer and subject
+echo "" | openssl s_client -connect google.com:443 2>/dev/null | openssl x509 -noout -issuer -subject
+```
