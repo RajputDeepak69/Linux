@@ -141,3 +141,94 @@ By encrypting the channel:
 - **Server identities are verified:** Web browsers confirm that the domain belongs to the entity holding the signed certificate.
 
 ---
+
+## Part 3: How TLS Secures Data
+
+TLS protects web communication by combining asymmetric cryptography, symmetric cryptography, and digital identity verification.
+
+---
+
+### 1. The Core Guarantees: The CIA Triad
+
+```
+                        TLS Security Pillars
+            ┌─────────────────────┼─────────────────────┐
+            ▼                     ▼                     ▼
+     Confidentiality          Integrity            Authenticity
+  (Symmetric Encryption)   (Cryptographic MAC)   (Digital Certificates)
+```
+
+1. **Confidentiality:** Scrambles data into unreadable ciphertext using AES-GCM or ChaCha20-Poly1305.
+2. **Integrity:** Appends an authentication tag (AEAD) to every packet. If an attacker changes a single bit, the receiver rejects the packet.
+3. **Authenticity:** Uses Public Key Infrastructure (PKI) and Certificate Authorities (CAs) so clients know they are communicating with the actual domain owner.
+
+---
+
+### 2. How the TLS 1.3 Handshake Works
+
+TLS 1.3 optimizes security and speed, completing key exchange and certificate verification in just **one round trip (1-RTT)**:
+
+```text
+       Client                                                    Server
+  (TCP Established)                                         (TCP Established)
+         │                                                         │
+         │  1. Client Hello                                        │
+         │     - Supported Cipher Suites (e.g., TLS_AES_256_GCM)   │
+         │     - Ephemeral Diffie-Hellman Key Share ($Client_{pub}$)│
+         │     - Server Name Indication (SNI: example.com)         │
+         ├────────────────────────────────────────────────────────▶│
+         │                                                         │
+         │  2. Server Hello                                        │
+         │     - Chosen Cipher Suite                               │
+         │     - Ephemeral Diffie-Hellman Key Share ($Server_{pub}$)│
+         │     - Server Digital Certificate (Public Identity)      │
+         │     - Encrypted Handshake Signature                     │
+         │◀────────────────────────────────────────────────────────┤
+         │                                                         │
+   [Verify Certificate]                                            │
+   [Derive Symmetric Key]                                    [Derive Symmetric Key]
+         │                                                         │
+         │  3. Finished + Encrypted HTTP Request                   │
+         ├────────────────────────────────────────────────────────▶│
+         │                                                         │
+         │ ══════════════ SECURE SYMMETRIC SESSION ═══════════════ │
+         │   Client and Server exchange data using AES-GCM key     │
+```
+
+---
+
+### 3. Step-by-Step Breakdown
+
+#### A. Cryptographic Key Derivation (Diffie-Hellman)
+- Rather than transmitting passwords or symmetric keys across the network, the client and server exchange public parameters ($Client_{pub}$ and $Server_{pub}$).
+- Using the **ECDHE (Elliptic Curve Diffie-Hellman Ephemeral)** mathematical principle, both sides independently calculate the exact same **shared symmetric session key**.
+- An attacker recording all network traffic cannot compute this key without solving computationally infeasible mathematical problems.
+
+#### B. Certificate & Identity Verification (PKI)
+- The server presents an **X.509 Digital Certificate** containing:
+  - Subject domain name (`example.com`)
+  - Server's long-term public key
+  - Expiration date
+  - Digital signature from an accredited **Certificate Authority (CA)** (e.g., Let's Encrypt, DigiCert)
+- The client verifies this signature using the CA public keys already built into the operating system or browser trust store.
+
+#### C. Bulk Data Encryption (Symmetric Session)
+- Once the handshake completes, asymmetric math is set aside.
+- All HTTP requests, cookies, and responses are encrypted and decrypted using the lightweight, hardware-accelerated symmetric session key.
+
+---
+
+## Summary Comparison
+
+| Concept | Plain HTTP | HTTPS / TLS |
+|---|---|---|
+| **Default Port** | `80` | `443` |
+| **Wire Payload** | Plain text | Ciphertext |
+| **Authentication** | None | Verified via X.509 Certificates |
+| **Tamper Detection** | None (easily spoofed) | Cryptographic MAC / AEAD validation |
+| **Protection** | Insecure | Confidentiality, Integrity, Authenticity |
+
+```text
+Traffic Flow:
+User ──▶ DNS (IP Lookup) ──▶ TCP (Port 443) ──▶ TLS (Tunnel) ──▶ HTTPS (Data Delivery)
+```
